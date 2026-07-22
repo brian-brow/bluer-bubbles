@@ -1,6 +1,6 @@
 import sqlite3
 
-DB_PATH = "/home/brian/projects/blue-bubbles/linux-sync/data/messages.db"
+DB_PATH = "/home/brian/projects/blue-bubbles/hub/data/messages.db"
 
 def get_connection():
     con = sqlite3.connect(DB_PATH)
