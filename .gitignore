@@ -1,0 +1,30 @@
+# Secrets — critical, never commit these
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# SQLite databases — contains real personal message data
+hub/data/*.db
+hub/data/*.db-shm
+hub/data/*.db-wal
+
+# Node / Tauri frontend
+gui/node_modules/
+gui/dist/
+gui/src-tauri/target/
+gui/src-tauri/gen/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
