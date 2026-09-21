@@ -11,11 +11,11 @@ struct APIKeyAuth: Sendable {
             return
         }
 
-        guard let key = ProcessInfo.processInfo.environment["BLUE_BUBBLES_API_KEY"],
+        guard let key = ProcessInfo.processInfo.environment["BLUER_BUBBLES_API_KEY"],
               !key.isEmpty else {
             throw HTTPError(
                 .internalServerError,
-                message: "API key is not in Keychain or BLUE_BUBBLES_API_KEY"
+                message: "API key is not in Keychain or BLUER_BUBBLES_API_KEY"
             )
         }
 
