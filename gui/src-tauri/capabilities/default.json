@@ -11,7 +11,7 @@
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [
-        "$HOME/.config/blue-bubbles/colors.css"
+        "$HOME/.config/bluer-bubbles/colors.css"
       ]
     }
   ]

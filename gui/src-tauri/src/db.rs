@@ -5,6 +5,8 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
+use crate::mac_api::{MacContact, MacContactIdentifier, MacMessage};
+
 #[derive(Debug, Serialize)]
 pub struct Message {
     pub id: i64,
@@ -111,6 +113,126 @@ impl Database {
             .map_err(|error| error.to_string())?;
 
         Ok(())
+    }
+
+    pub fn last_message_id(&self) -> Result<i64, String> {
+        let connection = self.connection()?;
+
+        connection
+            .query_row(
+                "SELECT COALESCE(MAX(id), 0) FROM messages",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn insert_messages(
+        &self,
+        messages: &[MacMessage],
+    ) -> Result<Vec<i64>, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(|error| error.to_string())?;
+        let mut inserted_ids = Vec::new();
+
+        for message in messages {
+            let inserted = transaction
+                .execute(
+                    "
+                    INSERT OR IGNORE INTO messages (
+                        id,
+                        guid,
+                        identifier,
+                        service,
+                        text,
+                        date,
+                        is_from_me,
+                        is_system_message,
+                        group_title,
+                        has_attachments
+                    )
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    ",
+                    params![
+                        message.row_id,
+                        message.guid,
+                        message.identifier,
+                        message.service,
+                        message.text,
+                        message.date,
+                        message.is_from_me,
+                        message.is_system_message,
+                        message.group_title,
+                        message.has_attachments,
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+
+            if inserted == 1 {
+                inserted_ids.push(message.row_id);
+            }
+        }
+
+        transaction.commit().map_err(|error| error.to_string())?;
+
+        Ok(inserted_ids)
+    }
+
+    pub fn upsert_contacts(&self, contacts: &[MacContact]) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(|error| error.to_string())?;
+
+        for contact in contacts {
+            transaction
+                .execute(
+                    "
+                    INSERT INTO contacts (id, first_name, last_name, organization)
+                    VALUES (?1, ?2, ?3, ?4)
+                    ON CONFLICT(id) DO UPDATE SET
+                        first_name = excluded.first_name,
+                        last_name = excluded.last_name,
+                        organization = excluded.organization
+                    ",
+                    params![
+                        contact.id,
+                        contact.first_name,
+                        contact.last_name,
+                        contact.organization,
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub fn upsert_contact_identifiers(
+        &self,
+        identifiers: &[MacContactIdentifier],
+    ) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(|error| error.to_string())?;
+
+        for identifier in identifiers {
+            transaction
+                .execute(
+                    "
+                    INSERT INTO contact_identifiers (contact_id, value, type)
+                    VALUES (?1, ?2, ?3)
+                    ON CONFLICT(value) DO UPDATE SET
+                        contact_id = excluded.contact_id,
+                        type = excluded.type
+                    ",
+                    params![
+                        identifier.contact_id,
+                        identifier.value,
+                        identifier.identifier_type,
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
+        }
+
+        transaction.commit().map_err(|error| error.to_string())
     }
 }
 

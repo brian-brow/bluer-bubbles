@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 async function loadTheme() {
   try {
     const css = await readTextFile(
-      ".config/blue-bubbles/colors.css",
+      ".config/bluer-bubbles/colors.css",
       {
         baseDir: BaseDirectory.Home,
       }
@@ -143,12 +143,10 @@ function App() {
   function sendMessage(message: string) {
     if (!selectedIdentifier) return;
 
-    fetch(`${API_BASE}/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({identifier: selectedIdentifier, message: message})
+    invoke("send", {
+      identifier: selectedIdentifier,
+      message: message
     })
-      .then((res) => res.json())
       .then((data) => console.log("Send result:", data))
       .catch((err) => console.error("Failed to send contact message:", err))
   }
