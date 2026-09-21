@@ -11,12 +11,12 @@ router.get("health") { _, _ -> String in
 
 router.get("contacts") { request, _ in
     try auth.requireKey(from: request)
-    try database.contacts()
+    return try database.contacts()
 }
 
 router.get("contacts/identifiers") { request, _ in
     try auth.requireKey(from: request)
-    try database.contactIdentifiers()
+    return try database.contactIdentifiers()
 }
 
 router.get("messages/:rowid") { request, context in

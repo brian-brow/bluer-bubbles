@@ -1,3 +1,4 @@
+import Foundation
 import Hummingbird
 import HTTPTypes
 
@@ -5,11 +6,20 @@ struct APIKeyAuth: Sendable {
     private let expectedKey: String
 
     init() throws {
-        guard let key = ProcessInfo.processInfo.environment["BLUE_BUBBLES_API_KEY"],
-              !key.isEmpty else {
-            throw HTTPError(.internalServerError, message: "BLUE_BUBBLES_API_KEY is not set")
+        if let key = try Keychain.load(), !key.isEmpty {
+            expectedKey = key
+            return
         }
 
+        guard let key = ProcessInfo.processInfo.environment["BLUE_BUBBLES_API_KEY"],
+              !key.isEmpty else {
+            throw HTTPError(
+                .internalServerError,
+                message: "API key is not in Keychain or BLUE_BUBBLES_API_KEY"
+            )
+        }
+
+        try Keychain.store(key)
         expectedKey = key
     }
 
