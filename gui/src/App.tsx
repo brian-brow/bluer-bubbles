@@ -4,6 +4,7 @@ import "./App.css";
 
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { BaseDirectory } from "@tauri-apps/api/path";
+import { invoke } from "@tauri-apps/api/core";
 
 async function loadTheme() {
   try {
@@ -74,9 +75,11 @@ function App() {
   }, [selectedIdentifier]);
 
   useEffect(() => {
-    fetch(`${API_BASE}/messages/first`)
-      .then((res) => res.json())
-      .then((data: Message[]) => {
+    invoke<Message[]>("list_latest_messages", {
+      beforeId: null,
+      limit: 30,
+    })
+      .then((data) => {
         setAllMessages(data);
         setLoading(false);
       })
@@ -123,9 +126,12 @@ function App() {
     : contacts;
 
   function fetchContactMessages(identifier: string) {
-    fetch(`${API_BASE}/messages/${encodeURIComponent(identifier)}`)
-      .then((res) => res.json())
-      .then((data: Message[]) => setDisplayedMessages(data))
+    invoke<Message[]>("list_messages", {
+      identifier: identifier,
+      beforeId: null,
+      limit: 30,
+    })
+      .then((data) => setDisplayedMessages(data))
       .catch((err) => console.error("Failed to fetch contact messages:", err));
   }
 
