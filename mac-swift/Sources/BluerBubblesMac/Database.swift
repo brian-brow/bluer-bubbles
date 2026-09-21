@@ -239,7 +239,14 @@ struct MacDatabase: Sendable {
         }
 
         guard result == SQLITE_OK, let database else {
-            throw DatabaseError.open("could not open \(path)")
+            let detail: String
+            if let database {
+                detail = "\(message(for: database)); SQLite \(sqlite3_extended_errcode(database)); OS errno \(sqlite3_system_errno(database))"
+                sqlite3_close(database)
+            } else {
+                detail = "SQLite \(result); no database handle"
+            }
+            throw DatabaseError.open("could not open \(path): \(detail)")
         }
 
         return database
