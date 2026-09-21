@@ -1,3 +1,4 @@
+import Foundation
 import Hummingbird
 
 let database = MacDatabase()
@@ -15,7 +16,7 @@ router.get("contacts") { request, _ in
     do {
         return try database.contacts()
     } catch {
-        print("contacts failed: \(error)")
+        FileHandle.standardError.write(Data("contacts failed: \(error)\n".utf8))
         throw error
     }
 }
@@ -26,7 +27,9 @@ router.get("contacts/identifiers") { request, _ in
     do {
         return try database.contactIdentifiers()
     } catch {
-        print("contact identifiers failed: \(error)")
+        FileHandle.standardError.write(
+            Data("contact identifiers failed: \(error)\n".utf8)
+        )
         throw error
     }
 }
@@ -38,7 +41,7 @@ router.get("messages/:rowid") { request, context in
     do {
         return try database.messages(after: rowId)
     } catch {
-        print("messages failed: \(error)")
+        FileHandle.standardError.write(Data("messages failed: \(error)\n".utf8))
         throw error
     }
 }
