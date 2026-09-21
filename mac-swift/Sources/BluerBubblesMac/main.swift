@@ -1,9 +1,14 @@
 import Hummingbird
 
+let database = MacDatabase()
 let router = Router()
 
 router.get("health") { _, _ -> String in
     "ok"
+}
+
+router.get("contacts") { _, _ in
+    try database.contacts()
 }
 
 let application = Application(

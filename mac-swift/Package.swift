@@ -24,6 +24,9 @@ let package = Package(
             name: "BluerBubblesMac",
             dependencies: [
                 .product(name: "Hummingbird", package: "hummingbird")
+            ],
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
             ]
         )
     ]
