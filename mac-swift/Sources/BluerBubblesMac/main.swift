@@ -2,26 +2,31 @@ import Hummingbird
 
 let database = MacDatabase()
 let sender = AppleScriptSender()
+let auth = try APIKeyAuth()
 let router = Router()
 
 router.get("health") { _, _ -> String in
     "ok"
 }
 
-router.get("contacts") { _, _ in
+router.get("contacts") { request, _ in
+    try auth.requireKey(from: request)
     try database.contacts()
 }
 
-router.get("contacts/identifiers") { _, _ in
+router.get("contacts/identifiers") { request, _ in
+    try auth.requireKey(from: request)
     try database.contactIdentifiers()
 }
 
-router.get("messages/:rowid") { _, context in
+router.get("messages/:rowid") { request, context in
+    try auth.requireKey(from: request)
     let rowId = try context.parameters.require("rowid", as: Int64.self)
     return try database.messages(after: rowId)
 }
 
 router.post("send") { request, context in
+    try auth.requireKey(from: request)
     let payload = try await request.decode(
         as: SendMessageRequest.self,
         context: context
