@@ -11,18 +11,36 @@ router.get("health") { _, _ -> String in
 
 router.get("contacts") { request, _ in
     try auth.requireKey(from: request)
-    return try database.contacts()
+
+    do {
+        return try database.contacts()
+    } catch {
+        print("contacts failed: \(error)")
+        throw error
+    }
 }
 
 router.get("contacts/identifiers") { request, _ in
     try auth.requireKey(from: request)
-    return try database.contactIdentifiers()
+
+    do {
+        return try database.contactIdentifiers()
+    } catch {
+        print("contact identifiers failed: \(error)")
+        throw error
+    }
 }
 
 router.get("messages/:rowid") { request, context in
     try auth.requireKey(from: request)
     let rowId = try context.parameters.require("rowid", as: Int64.self)
-    return try database.messages(after: rowId)
+
+    do {
+        return try database.messages(after: rowId)
+    } catch {
+        print("messages failed: \(error)")
+        throw error
+    }
 }
 
 router.post("send") { request, context in
