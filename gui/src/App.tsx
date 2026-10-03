@@ -41,8 +41,6 @@ interface Message {
   organization: string;
 }
 
-const API_BASE = "http://localhost:8001";
-
 function getInitials(firstName: string, lastName: string): string {
   const first = firstName?.trim()?.[0] ?? "";
   const last = lastName?.trim()?.[0] ?? "";
@@ -59,16 +57,32 @@ function getDisplayName(msg: Message): string {
   return msg.identifier;
 }
 
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const messages = new Map(existing.map((message) => [message.id, message]));
+
+  for (const message of incoming) {
+    messages.set(message.id, message);
+  }
+
+  return Array.from(messages.values());
+}
+
 function App() {
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [displayedMessages, setDisplayedMessages] = useState<Message[]>([]);
 
   const [selectedIdentifier, setSelectedIdentifier] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [hasOlderContacts, setHasOlderContacts] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(true);
   const [draftText, setDraftText] = useState("");
   const [searchText, setSearchText] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const contactsScrollRef = useRef<HTMLUListElement>(null);
+  const conversationScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -81,6 +95,7 @@ function App() {
     })
       .then((data) => {
         setAllMessages(data);
+        setHasOlderContacts(data.length === 30);
         setLoading(false);
       })
       .catch((err) => {
@@ -88,6 +103,61 @@ function App() {
         setLoading(false);
       });
   }, []);
+
+  function loadOlderContacts() {
+    if (loadingContacts || !hasOlderContacts) return;
+
+    const oldestId = allMessages.reduce(
+      (oldest, message) => Math.min(oldest, message.id),
+      Number.MAX_SAFE_INTEGER,
+    );
+    setLoadingContacts(true);
+
+    invoke<Message[]>("list_latest_messages", {
+      beforeId: oldestId === Number.MAX_SAFE_INTEGER ? null : oldestId,
+      limit: 30,
+    })
+      .then((data) => {
+        setAllMessages((current) => mergeMessages(current, data));
+        setHasOlderContacts(data.length === 30);
+      })
+      .catch((err) => console.error("Failed to load older contacts:", err))
+      .finally(() => setLoadingContacts(false));
+  }
+
+  async function loadAllContacts() {
+    if (loadingContacts || !hasOlderContacts) return;
+
+    setLoadingContacts(true);
+    let loaded = allMessages;
+    let beforeId = loaded.reduce(
+      (oldest, message) => Math.min(oldest, message.id),
+      Number.MAX_SAFE_INTEGER,
+    );
+
+    try {
+      while (true) {
+        const data = await invoke<Message[]>("list_latest_messages", {
+          beforeId: beforeId === Number.MAX_SAFE_INTEGER ? null : beforeId,
+          limit: 30,
+        });
+        loaded = mergeMessages(loaded, data);
+
+        if (data.length < 30) {
+          setHasOlderContacts(false);
+          break;
+        }
+
+        beforeId = data[data.length - 1].id;
+      }
+
+      setAllMessages(loaded);
+    } catch (err) {
+      console.error("Failed to load all contacts:", err);
+    } finally {
+      setLoadingContacts(false);
+    }
+  }
 
   // Build the contact list: unique phone -> { firstName, lastName, highestId, lastText }
   // sorted by highestId descending, most recently active first
@@ -125,19 +195,70 @@ function App() {
     ? fuse.search(searchText).map((result) => [result.item.identifier, result.item] as const)
     : contacts;
 
-  function fetchContactMessages(identifier: string) {
+  function fetchContactMessages(
+    identifier: string,
+    beforeId: number | null = null,
+    replace = false,
+  ) {
     invoke<Message[]>("list_messages", {
       identifier: identifier,
-      beforeId: null,
+      beforeId,
       limit: 30,
     })
-      .then((data) => setDisplayedMessages(data))
+      .then((data) => {
+        setDisplayedMessages((current) =>
+          replace ? data : mergeMessages(current, data),
+        );
+
+        if (replace) {
+          setHasOlderMessages(data.length === 30);
+          requestAnimationFrame(() => {
+            const element = conversationScrollRef.current;
+            if (element) element.scrollTop = element.scrollHeight;
+          });
+        }
+      })
       .catch((err) => console.error("Failed to fetch contact messages:", err));
+  }
+
+  function loadOlderMessages() {
+    if (!selectedIdentifier || loadingOlder || !hasOlderMessages) return;
+
+    const oldestId = displayedMessages.reduce(
+      (oldest, message) => Math.min(oldest, message.id),
+      Number.MAX_SAFE_INTEGER,
+    );
+
+    if (oldestId === Number.MAX_SAFE_INTEGER) return;
+
+    const element = conversationScrollRef.current;
+    const previousHeight = element?.scrollHeight ?? 0;
+    setLoadingOlder(true);
+
+    invoke<Message[]>("list_messages", {
+      identifier: selectedIdentifier,
+      beforeId: oldestId,
+      limit: 30,
+    })
+      .then((data) => {
+        setDisplayedMessages((current) => mergeMessages(data, current));
+        setHasOlderMessages(data.length === 30);
+
+        requestAnimationFrame(() => {
+          if (element) {
+            element.scrollTop += element.scrollHeight - previousHeight;
+          }
+        });
+      })
+      .catch((err) => console.error("Failed to load older messages:", err))
+      .finally(() => setLoadingOlder(false));
   }
 
   function selectContact(identifier: string) {
     setSelectedIdentifier(identifier);
-    fetchContactMessages(identifier);
+    setDisplayedMessages([]);
+    setHasOlderMessages(true);
+    fetchContactMessages(identifier, null, true);
   }
 
   function sendMessage(message: string) {
@@ -162,10 +283,12 @@ function App() {
 
   // Poll the full message list every 5s to keep the sidebar (previews/ordering) fresh
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetch(`${API_BASE}/messages`)
-        .then((res) => res.json())
-        .then((data: Message[]) => setAllMessages(data))
+      const interval = setInterval(() => {
+        invoke<Message[]>("list_latest_messages", {
+        beforeId: null,
+        limit: 30,
+        })
+        .then((data: Message[]) => setAllMessages((current) => mergeMessages(current, data)))
         .catch((err) => console.error("Failed to refresh sidebar:", err));
     }, 5000);
     return () => clearInterval(interval);
@@ -181,8 +304,8 @@ function App() {
         backgroundColor: "var(--background)",
       }}
     >
-      <div
-        className="w-[300px] shrink-0 overflow-y-auto flex flex-col"
+       <div
+         className="w-[300px] shrink-0 overflow-hidden flex flex-col"
         style={{
           borderRight: "1px solid var(--outline-variant)",
           backgroundColor: "var(--surface-container)",
@@ -215,9 +338,10 @@ function App() {
             ref={inputRef}
             type="text"
             value={searchText}
-            onChange={(e) => {
-              setSearchText(e.target.value);
-            }}
+             onChange={(e) => {
+               setSearchText(e.target.value);
+               if (e.target.value.trim()) void loadAllContacts();
+             }}
             placeholder="Search"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: "15px", fontWeight: 400, color: "var(--text)" }}
@@ -234,10 +358,24 @@ function App() {
             </button>
           )}
         </div>
-        <ul className="flex-1 overflow-y-auto">
+        <ul
+          ref={contactsScrollRef}
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            if (element.scrollHeight - element.clientHeight - element.scrollTop <= 40) {
+              loadOlderContacts();
+            }
+          }}
+          className="flex-1 overflow-y-auto"
+        >
           {loading && (
             <li className="px-5 py-3" style={{ fontSize: "13px", color: "var(--text-muted)" }}>
               Loading…
+            </li>
+          )}
+          {loadingContacts && !loading && (
+            <li className="px-5 py-3" style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+              Loading contacts…
             </li>
           )}
           {visibleContacts.map(([identifier, { firstName, lastName, displayName, lastText }]) => {
@@ -300,7 +438,20 @@ function App() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col justify-end gap-2">
+            <div
+              ref={conversationScrollRef}
+              onScroll={(event) => {
+                if (event.currentTarget.scrollTop <= 40) {
+                  loadOlderMessages();
+                }
+              }}
+              className="flex-1 overflow-y-auto px-6 py-6 flex flex-col justify-end gap-2"
+            >
+              {loadingOlder && (
+                <div className="text-center" style={{ color: "var(--text-muted)" }}>
+                  Loading older messages…
+                </div>
+              )}
               {[...displayedMessages]
                 .sort((a, b) => a.id - b.id)
                 .map((msg) => {
